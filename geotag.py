@@ -129,7 +129,12 @@ def geotag(scriptdir, gpxfilepath, inputdir, outputdir, workdir='.'):
 
     print 'Moving images to destination'
     for filename in glob('G*.JPG'):
-        shutil.move(filename, outputdir)
+        try:
+            # shutil won't remove originals in linux when copying to another filesystem.
+            # oh well. wrap it and get over it.
+            shutil.move(filename, outputdir)
+        except Exception, e:
+            pass
     print 'Success'
 
     return 1
