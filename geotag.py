@@ -42,10 +42,14 @@ def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
     basename = os.path.splitext(os.path.basename(gpxfilepath))[0]
 
     print 'Geotagging images'
+    # keeps command open in a thread
     cmd = ['exiftool', '-geotag', gpxfilepath, '-geotime<FileModifyDate',
-           '-P', '-o', workdir, inputdir]
-    proc = Popen(cmd)
-    proc.communicate()
+           '-P', '-o', workdir, '-stay_open', 'true', '-@', '-']
+    proc = Popen(cmd, stdin=PIPE)
+    # pipe matched images to command
+    images = glob(os.path.join(inputdir, 'G[!O]*.JPG'))
+    args = '\n'.join(images + ['-execute', '-stay_open', 'false'])
+    proc.communicate(args + '\n')
     print 'Success'
 
     print 'Extracting geotags from images'
@@ -54,6 +58,16 @@ def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
     proc = Popen(cmd, stdout=tmpjsonfile)
     proc.communicate()
     tmpjsonfile.close()
+    # parse json and delete images that didn't get geotagged
+    tmpjsonfile = open('tmp.json', 'r')
+    waypoints = json.load(tmpjsonfile)
+    missing_waypoints = []
+    for waypoint in waypoints:
+        if not 'GPSLatitude' in waypoint:
+            missing_waypoints.append(waypoint)
+    for waypoint in missing_waypoints:
+        os.remove(waypoint['SourceFile'])
+        waypoints.remove(waypoint)
     print 'Success'
 
     print 'Adding image geotags to gpx as waypoints'
@@ -61,10 +75,6 @@ def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
     gpxfile = open(os.path.abspath(gpxfilepath), 'r+')
     gpx = gpxpy.parse(gpxfile)
     gpxfile.close()
-    # parse json
-    tmpjsonfile = open('tmp.json', 'r')
-    waypoints = json.load(tmpjsonfile)
-    tmpjsonfile.close()
     # add waypoints
     for waypoint in waypoints:
         lat, lon = (float(waypoint['GPSLatitude']), float(waypoint['GPSLongitude']))
@@ -92,6 +102,11 @@ def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
     jsonfile.close()
     print 'Success'
 
+    print 'Cleaning up temp files'
+    os.remove('tmp.gpx')
+    os.remove('tmp.json')
+    print 'Success'
+
     print 'Creating mp4'
     cmd = ['ffmpeg', '-r', '5', '-pattern_type', 'glob', '-i',
            os.path.join(workdir, 'G*.JPG'), '-c:v', 'libx264', '-pix_fmt',
@@ -114,11 +129,6 @@ def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
     print 'Moving images to destination'
     for filename in glob('G*.JPG'):
         shutil.move(filename, outputdir)
-    print 'Success'
-
-    print 'Cleaning up'
-    os.remove('tmp.gpx')
-    os.remove('tmp.json')
     print 'Success'
 
     return 1
@@ -148,14 +158,3 @@ if __name__ == '__main__':
 
     with chdir(args.workdir):
         sys.exit(geotag(**vars(args)))
-
-
-# exiftool -geotag 20140602.gpx "-geotime<FileModifyDate" -P -o 100GOPRO /Volumes/NO\ NAME/DCIM/100GOPRO
-
-# exiftool -GPSLatitude -GPSLongitude -json 100GOPRO > out.args
-
-# togeojson file.kml > file.geojson
-
-# ffmpeg -r 5 -pattern_type glob -i "100GOPRO/G*.JPG" -c:v libx264 -pix_fmt yuv420p -s 920x690 -preset veryslow -tune stillimage -profile:v baseline -level 3.0 -movflags +faststart out.mp4
-
-# ffmpeg -r 5 -pattern_type glob -i "100GOPRO/G*.JPG" -c:v libvpx -crf 10 -b:v 4M -c:a libvorbis -s 920x690 out.webm
