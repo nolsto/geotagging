@@ -38,7 +38,7 @@ def directory(string):
     return string
 
 
-def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
+def geotag(scriptdir, gpxfilepath, inputdir, outputdir, workdir='.'):
     basename = os.path.splitext(os.path.basename(gpxfilepath))[0]
 
     print 'Geotagging images'
@@ -54,7 +54,8 @@ def geotag(gpxfilepath, inputdir, outputdir, workdir='.'):
 
     print 'Extracting geotags from images'
     tmpjsonfile = open('tmp.json', 'w+')
-    cmd = ['exiftool', '-GPSLatitude', '-GPSLongitude', '-c', '%+f', '-json', workdir]
+    cmd = ['exiftool', '-config', os.path.join(scriptdir, 'ExifTool_config'),
+           '-GPSLatitude', '-GPSLongitude', '-json', workdir]
     proc = Popen(cmd, stdout=tmpjsonfile)
     proc.communicate()
     tmpjsonfile.close()
@@ -156,5 +157,7 @@ def argument_parser():
 if __name__ == '__main__':
     args = argument_parser().parse_args()
 
+    scriptdir = os.path.dirname(os.path.realpath(sys.argv[0]))
+
     with chdir(args.workdir):
-        sys.exit(geotag(**vars(args)))
+        sys.exit(geotag(scriptdir, **vars(args)))
